@@ -10,10 +10,27 @@
 
 #include <linux/module.h>
 #include <linux/input.h>
+#include <asm/io.h>
 
 #define DRIVER_NAME	"fdspkr"
 #define DRIVER_VERSION	"0.1"
 #define DRIVER_LICENSE	"GPL v2"
+
+/* Raspberry PI 2 GPIO (just some registers we will use) */
+resource_size_t GPIO_BASE = 0x3f200000;
+size_t GPIO_LEN = 0xb4;
+#define GPFSEL0		0x00
+#define GPFSEL1		0x04
+#define GPFSEL2		0x08
+#define GPFSEL3		0x0C
+#define GPFSEL4		0x10
+#define GPFSEL5		0x14
+#define GPSET0		0x1C
+#define GPSET1		0x20
+#define GPCLR0		0x28
+#define GPCLR1		0x2C
+
+volatile void __iomem *gpio_base;
 
 struct input_dev *fdspkr_input;
 
@@ -41,9 +58,14 @@ static int __init fdspkr_init(void)
 {
 	int ret;
 
-	fdspkr_input = input_allocate_device();
-	if (!fdspkr_input)
+	if ((gpio_base = ioremap(GPIO_BASE, GPIO_LEN)) == NULL)
 		return -ENOMEM;
+
+	fdspkr_input = input_allocate_device();
+	if (!fdspkr_input) {
+		iounmap(gpio_base);
+		return -ENOMEM;
+	}
 
 	fdspkr_input->name = "Floppy Disk Speaker";
 	fdspkr_input->evbit[0] = BIT(EV_SND);
@@ -55,6 +77,7 @@ static int __init fdspkr_init(void)
 	ret = input_register_device(fdspkr_input);
 	if (ret) {
 		input_free_device(fdspkr_input);
+		iounmap(gpio_base);
 		return ret;
 	}
 
@@ -66,6 +89,7 @@ static int __init fdspkr_init(void)
 static void __exit fdspkr_exit(void)
 {
 	input_unregister_device(fdspkr_input);
+	iounmap(gpio_base);
 
 	printk("FD Speaker exit\n");
 }

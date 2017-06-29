@@ -32,6 +32,9 @@ size_t GPIO_LEN = 0xb4;
 #define GPCLRn(pin)	(GPCLR0 + ((pin) / 32) * 4)
 #define GPCLRs(pin)	GPSETs(pin)
 
+#define GPIO_DIR	23
+#define GPIO_STEP	24
+
 volatile void __iomem *gpio_base;
 
 struct input_dev *fdspkr_input;
@@ -59,10 +62,21 @@ unsigned int code, int value)
 static int __init fdspkr_init(void)
 {
 	int ret;
+	u32 reg;
 
+	/* Prepare GPIO */
 	if ((gpio_base = ioremap(GPIO_BASE, GPIO_LEN)) == NULL)
 		return -ENOMEM;
 
+	reg = ioread32(gpio_base + GPFSELn(GPIO_DIR));
+	reg |= (1 << GPFSELs(GPIO_DIR));
+	iowrite32(reg, gpio_base + GPFSELn(GPIO_DIR));
+
+	reg = ioread32(gpio_base + GPFSELn(GPIO_STEP));
+	reg |= (1 << GPFSELs(GPIO_STEP));
+	iowrite32(reg, gpio_base + GPFSELn(GPIO_STEP));
+
+	/* Prepare input device */
 	fdspkr_input = input_allocate_device();
 	if (!fdspkr_input) {
 		iounmap(gpio_base);

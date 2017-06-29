@@ -19,16 +19,18 @@
 /* Raspberry PI 2 GPIO (just some registers we will use) */
 resource_size_t GPIO_BASE = 0x3f200000;
 size_t GPIO_LEN = 0xb4;
+
+/* GPIO registers */
 #define GPFSEL0		0x00
-#define GPFSEL1		0x04
-#define GPFSEL2		0x08
-#define GPFSEL3		0x0C
-#define GPFSEL4		0x10
-#define GPFSEL5		0x14
 #define GPSET0		0x1C
-#define GPSET1		0x20
 #define GPCLR0		0x28
-#define GPCLR1		0x2C
+
+#define GPFSELn(pin)	(GPFSEL0 + ((pin) / 10) * 4)
+#define GPFSELs(pin)	(((pin) % 10) * 3)
+#define GPSETn(pin)	(GPSET0 + ((pin) / 32) * 4)
+#define GPSETs(pin)	((pin) % 32)
+#define GPCLRn(pin)	(GPCLR0 + ((pin) / 32) * 4)
+#define GPCLRs(pin)	GPSETs(pin)
 
 volatile void __iomem *gpio_base;
 

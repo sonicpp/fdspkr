@@ -10,6 +10,7 @@
 
 #include <linux/module.h>
 #include <linux/input.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 
 #define DRIVER_NAME	"fdspkr"
@@ -61,7 +62,7 @@ unsigned int code, int value)
 
 static int __init fdspkr_init(void)
 {
-	int ret;
+	int ret, i;
 	u32 reg;
 
 	/* Prepare GPIO */
@@ -75,6 +76,26 @@ static int __init fdspkr_init(void)
 	reg = ioread32(gpio_base + GPFSELn(GPIO_STEP));
 	reg |= (1 << GPFSELs(GPIO_STEP));
 	iowrite32(reg, gpio_base + GPFSELn(GPIO_STEP));
+
+	/* Move motor to make sure we have enought space
+	 * to move there and back again. */
+	iowrite32(1 << GPCLRs(GPIO_DIR), gpio_base + GPCLRn(GPIO_DIR));
+	for (i = 0; i < 4; i++) { /* Move motor in one direction...*/
+		iowrite32(1 << GPSETs(GPIO_STEP),
+			gpio_base + GPSETn(GPIO_STEP));
+		iowrite32(1 << GPCLRs(GPIO_STEP),
+			gpio_base + GPCLRn(GPIO_STEP));
+		udelay(10ul);
+	}
+
+	iowrite32(1 << GPSETs(GPIO_DIR), gpio_base + GPSETn(GPIO_DIR));
+	for (i = 0; i < 2; i++) { /* ...and move back a little */
+		iowrite32(1 << GPSETs(GPIO_STEP),
+			gpio_base + GPSETn(GPIO_STEP));
+		iowrite32(1 << GPCLRs(GPIO_STEP),
+			gpio_base + GPCLRn(GPIO_STEP));
+		udelay(10ul);
+	}
 
 	/* Prepare input device */
 	fdspkr_input = input_allocate_device();
@@ -105,6 +126,8 @@ static int __init fdspkr_init(void)
 static void __exit fdspkr_exit(void)
 {
 	input_unregister_device(fdspkr_input);
+	iowrite32(1 << GPCLRs(GPIO_DIR), gpio_base + GPCLRn(GPIO_DIR));
+	iowrite32(1 << GPCLRs(GPIO_STEP), gpio_base + GPCLRn(GPIO_STEP));
 	iounmap(gpio_base);
 
 	printk("FD Speaker exit\n");

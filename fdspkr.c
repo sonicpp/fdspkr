@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/delay.h>
+#include <linux/hrtimer.h>
 #include <asm/io.h>
 
 #define DRIVER_NAME	"fdspkr"
@@ -39,6 +40,7 @@ size_t GPIO_LEN = 0xb4;
 volatile void __iomem *gpio_base;
 
 struct input_dev *fdspkr_input;
+struct hrtimer fdspkr_timer;
 
 static int fdspkr_open(struct input_dev *dev)
 {
@@ -65,6 +67,11 @@ unsigned int code, int value)
 	}
 
 	return 0;
+}
+
+static enum hrtimer_restart fdspkr_callback(struct hrtimer *timer)
+{
+	return HRTIMER_NORESTART;
 }
 
 static int __init fdspkr_init(void)
@@ -104,6 +111,10 @@ static int __init fdspkr_init(void)
 		udelay(10ul);
 	}
 
+	/* Prepare timer */
+	hrtimer_init(&fdspkr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	fdspkr_timer.function = &fdspkr_callback;
+
 	/* Prepare input device */
 	fdspkr_input = input_allocate_device();
 	if (!fdspkr_input) {
@@ -133,6 +144,7 @@ static int __init fdspkr_init(void)
 static void __exit fdspkr_exit(void)
 {
 	input_unregister_device(fdspkr_input);
+	hrtimer_cancel(&fdspkr_timer);
 	iowrite32(1 << GPCLRs(GPIO_DIR), gpio_base + GPCLRn(GPIO_DIR));
 	iowrite32(1 << GPCLRs(GPIO_STEP), gpio_base + GPCLRn(GPIO_STEP));
 	iounmap(gpio_base);

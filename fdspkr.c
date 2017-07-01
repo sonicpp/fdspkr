@@ -55,7 +55,14 @@ static void fdspkr_close(struct input_dev *dev)
 static int fdspkr_event(struct input_dev *dev, unsigned int type,
 unsigned int code, int value)
 {
-	printk("type %u, code %u, value %d\n", type, code, value);
+	if (type != EV_SND)
+		return -1;
+
+	switch (code) {
+		case SND_BELL: if (value) value = 1000;
+		case SND_TONE: break;
+		default: return -1;
+	}
 
 	return 0;
 }

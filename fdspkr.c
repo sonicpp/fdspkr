@@ -37,10 +37,20 @@ size_t GPIO_LEN = 0xb4;
 #define GPIO_DIR	23
 #define GPIO_STEP	24
 
+/* Some constants used for convert frequency [Hz] into FDD tick rate.
+ * The constants were selected to support FDD frequency range
+ * at least 1000 Hz. */
+#define FD_TICK_RATE	37120000
+#define FD_TICK_SHIFT	7
+#define FD_MIN_HZ	50
+#define FD_MAX_HZ	1050
+
 volatile void __iomem *gpio_base;
 
 struct input_dev *fdspkr_input;
 struct hrtimer fdspkr_timer;
+ktime_t interval;
+int curr_dir = 1;
 
 static int fdspkr_open(struct input_dev *dev)
 {
@@ -57,6 +67,8 @@ static void fdspkr_close(struct input_dev *dev)
 static int fdspkr_event(struct input_dev *dev, unsigned int type,
 unsigned int code, int value)
 {
+	unsigned count = 0;
+
 	if (type != EV_SND)
 		return -1;
 
@@ -66,12 +78,36 @@ unsigned int code, int value)
 		default: return -1;
 	}
 
+	hrtimer_cancel(&fdspkr_timer);
+
+	if (value > FD_MIN_HZ && value < FD_MAX_HZ)
+		count = (FD_TICK_RATE / value) << FD_TICK_SHIFT;
+
+	if (count) {
+		interval = ktime_set(0, count);
+		hrtimer_start(&fdspkr_timer, interval, HRTIMER_MODE_REL);
+	}
+
 	return 0;
 }
 
 static enum hrtimer_restart fdspkr_callback(struct hrtimer *timer)
 {
-	return HRTIMER_NORESTART;
+	ktime_t time_curr;
+
+	if (curr_dir)
+		iowrite32(1 << GPCLRs(GPIO_DIR), gpio_base + GPCLRn(GPIO_DIR));
+	else
+		iowrite32(1 << GPSETs(GPIO_DIR), gpio_base + GPSETn(GPIO_DIR));
+	curr_dir = !curr_dir;
+
+	iowrite32(1 << GPSETs(GPIO_STEP), gpio_base + GPSETn(GPIO_STEP));
+	iowrite32(1 << GPCLRs(GPIO_STEP), gpio_base + GPCLRn(GPIO_STEP));
+
+	time_curr = hrtimer_cb_get_time(&fdspkr_timer);
+	hrtimer_forward(&fdspkr_timer, time_curr, interval);
+
+	return HRTIMER_RESTART;
 }
 
 static int __init fdspkr_init(void)

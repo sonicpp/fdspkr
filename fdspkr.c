@@ -1,7 +1,7 @@
 /*
  * fdspkr.c - Floppy Disk Speaker driver for Linux
  *
- * Copyright (C) 2017 Jan Havran <havran.jan@email.cz>
+ * Copyright (C) 2017, 2021 Jan Havran <havran.jan@email.cz>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -12,6 +12,7 @@
 #include <linux/input.h>
 #include <linux/delay.h>
 #include <linux/hrtimer.h>
+#include <linux/platform_device.h>
 #include <asm/io.h>
 
 #define DRIVER_NAME	"fdspkr"
@@ -110,7 +111,7 @@ static enum hrtimer_restart fdspkr_callback(struct hrtimer *timer)
 	return HRTIMER_RESTART;
 }
 
-static int __init fdspkr_init(void)
+static int fdspkr_probe(struct platform_device *pdev)
 {
 	int ret, i;
 	u32 reg;
@@ -172,12 +173,12 @@ static int __init fdspkr_init(void)
 		return ret;
 	}
 
-	printk("FD Speaker init\n");
+	printk("FD Speaker probe\n");
 
 	return 0;
 }
 
-static void __exit fdspkr_exit(void)
+static int fdspkr_remove(struct platform_device *pdev)
 {
 	input_unregister_device(fdspkr_input);
 	hrtimer_cancel(&fdspkr_timer);
@@ -185,11 +186,21 @@ static void __exit fdspkr_exit(void)
 	iowrite32(1 << GPCLRs(GPIO_STEP), gpio_base + GPCLRn(GPIO_STEP));
 	iounmap(gpio_base);
 
-	printk("FD Speaker exit\n");
+	printk("FD Speaker remove\n");
+
+	return 0;
 }
 
-module_init(fdspkr_init);
-module_exit(fdspkr_exit);
+static struct platform_driver fdspkr_driver = {
+	.probe	= fdspkr_probe,
+	.remove	= fdspkr_remove,
+	.driver = {
+		.name = DRIVER_NAME,
+		.owner = THIS_MODULE,
+	},
+};
+
+module_platform_driver(fdspkr_driver);
 
 MODULE_AUTHOR("Jan Havran <havran.jan@email.cz>");
 MODULE_DESCRIPTION("Floppy Disk Speaker");
